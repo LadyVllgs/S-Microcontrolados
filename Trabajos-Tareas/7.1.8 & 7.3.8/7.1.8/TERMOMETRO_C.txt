@@ -1,0 +1,53 @@
+//IMPRIMIR VALORES DE TEMPERATURA DE 0 A 100 USANDO ARDUINO FRAMEWORK
+//Integrantes:Leidy Villegas, Isai Romero, Freider Redondo, Daniel Caballero
+
+#include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "driver/gpio.h"
+#include "driver/adc.h"
+
+// Se definen los LEDS y el potenciometro
+#define LED GPIO_NUM_5
+#define SENSOR ADC1_CHANNEL_6   
+
+void app_main(void)
+{
+    // Configuración LED
+    gpio_reset_pin(LED);
+    gpio_set_direction(LED, GPIO_MODE_OUTPUT);
+
+    // Configuración ADC
+    adc1_config_width(ADC_WIDTH_BIT_12); // 12 bits: 0–4095
+    adc1_config_channel_atten(SENSOR, ADC_ATTEN_DB_11);
+
+    while (1) {
+        long suma = 0;
+
+        // Tomar 50 muestras
+        for (int i = 0; i < 50; i++) {
+            int valor = adc1_get_raw(SENSOR);
+            suma += valor;
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+
+        // Promedio ADC
+        int promedio = suma / 50;
+
+        // Conversión a temperatura (0–100 °C)
+        float temperatura = (promedio / 4095.0) * 100.0;
+
+        // Imprimir en consola (UART0 por defecto)
+        printf("ADC lectura: %d -> Temp: %.2f °C\n", promedio, temperatura);
+
+        // Encender LED si T > 50 °C
+        if (temperatura > 50.0) {
+            gpio_set_level(LED, 1);
+        } else {
+            gpio_set_level(LED, 0);
+        }
+
+        // Esperar 3 segundos
+        vTaskDelay(pdMS_TO_TICKS(3000));
+    }
+}

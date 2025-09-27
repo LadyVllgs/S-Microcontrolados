@@ -1,0 +1,138 @@
+//AJUSTAR LA INTENSIDAD DE UN LED POR MEDIO DE PWM Y ACTIVAR 4 MOTORES USANDO FRAMEWORK ARDUINO
+//INTEGRANTES: Leidy Villegas, Isai Romero, Freider Redondo, Daniel Caballero
+
+#include <Arduino.h>
+
+// CONFIGURACIÓN PARA MÓDULOS RELAY
+#define POTENTIOMETER_PIN 34     // GPIO34 para potenciómetro
+#define LED_PWM_PIN       2      // GPIO2 para PWM del LED
+#define RELAY1_PIN        4      // GPIO4 para Relay 1
+#define RELAY2_PIN        5      // GPIO5 para Relay 2
+#define RELAY3_PIN        18     // GPIO18 para Relay 3
+#define RELAY4_PIN        19     // GPIO19 para Relay 4
+
+#define PWM_RESOLUTION    8     
+#define READ_DELAY_MS     1000
+#define ADC_MAX_VALUE     4095
+
+#define RELAY_ACTIVE_HIGH true  
+
+void controlRelays(int percentage) {
+    int relay1, relay2, relay3, relay4;
+    
+    if (percentage > 0 && percentage <= 25) {
+        relay1 = 1; relay2 = 0; relay3 = 0; relay4 = 0;
+    }
+    else if (percentage > 25 && percentage <= 50) {
+        relay1 = 1; relay2 = 1; relay3 = 0; relay4 = 0;
+    }
+    else if (percentage > 50 && percentage <= 75) {
+        relay1 = 1; relay2 = 1; relay3 = 1; relay4 = 0;
+    }
+    else if (percentage > 75 && percentage <= 100) {
+        relay1 = 1; relay2 = 1; relay3 = 1; relay4 = 1;
+    }
+    else {
+        relay1 = 0; relay2 = 0; relay3 = 0; relay4 = 0;
+    }
+    
+    #if RELAY_ACTIVE_HIGH
+        digitalWrite(RELAY1_PIN, relay1 ? HIGH : LOW);
+        digitalWrite(RELAY2_PIN, relay2 ? HIGH : LOW);
+        digitalWrite(RELAY3_PIN, relay3 ? HIGH : LOW);
+        digitalWrite(RELAY4_PIN, relay4 ? HIGH : LOW);
+    #else
+        digitalWrite(RELAY1_PIN, relay1 ? LOW : HIGH);
+        digitalWrite(RELAY2_PIN, relay2 ? LOW : HIGH);
+        digitalWrite(RELAY3_PIN, relay3 ? LOW : HIGH);
+        digitalWrite(RELAY4_PIN, relay4 ? LOW : HIGH);
+    #endif
+}
+
+void printJsonMessage(int percentage) {
+    int relay1, relay2, relay3, relay4;
+    
+    if (percentage > 0 && percentage <= 25) {
+        relay1 = 1; relay2 = 0; relay3 = 0; relay4 = 0;
+    }
+    else if (percentage > 25 && percentage <= 50) {
+        relay1 = 1; relay2 = 1; relay3 = 0; relay4 = 0;
+    }
+    else if (percentage > 50 && percentage <= 75) {
+        relay1 = 1; relay2 = 1; relay3 = 1; relay4 = 0;
+    }
+    else if (percentage > 75 && percentage <= 100) {
+        relay1 = 1; relay2 = 1; relay3 = 1; relay4 = 1;
+    }
+    else {
+        relay1 = 0; relay2 = 0; relay3 = 0; relay4 = 0;
+    }
+    
+    Serial.print("{\"valor\": ");
+    Serial.print(percentage);
+    Serial.print(", \"relay1\": ");
+    Serial.print(relay1);
+    Serial.print(", \"relay2\": ");
+    Serial.print(relay2);
+    Serial.print(", \"relay3\": ");
+    Serial.print(relay3);
+    Serial.print(", \"relay4\": ");
+    Serial.print(relay4);
+    Serial.println("}");
+}
+
+void setup() {
+    Serial.begin(115200);
+    
+    pinMode(RELAY1_PIN, OUTPUT);
+    pinMode(RELAY2_PIN, OUTPUT);
+    pinMode(RELAY3_PIN, OUTPUT);
+    pinMode(RELAY4_PIN, OUTPUT);
+    
+    pinMode(LED_PWM_PIN, OUTPUT);
+    
+    #if RELAY_ACTIVE_HIGH
+        digitalWrite(RELAY1_PIN, LOW);
+        digitalWrite(RELAY2_PIN, LOW);
+        digitalWrite(RELAY3_PIN, LOW);
+        digitalWrite(RELAY4_PIN, LOW);
+    #else
+        digitalWrite(RELAY1_PIN, HIGH); 
+        digitalWrite(RELAY2_PIN, HIGH);
+        digitalWrite(RELAY3_PIN, HIGH);
+        digitalWrite(RELAY4_PIN, HIGH);
+    #endif
+    
+    analogWrite(LED_PWM_PIN, 0);
+    
+    Serial.println("=== SISTEMA DE CONTROL CON RELAYS ===");
+    Serial.println("Potenciómetro → LED PWM + Control de 4 Relays");
+    Serial.println("Rangos de activación:");
+    Serial.println("0-25%: Relay 1 ON");
+    Serial.println("25-50%: Relays 1-2 ON");
+    Serial.println("50-75%: Relays 1-3 ON");
+    Serial.println("75-100%: Todos los relays ON");
+    Serial.println("=====================================");
+}
+
+void loop() {
+    int adcValue = analogRead(POTENTIOMETER_PIN);
+    int percentage = (adcValue * 100) / ADC_MAX_VALUE;
+    percentage = constrain(percentage, 0, 100);
+    
+    int pwmValue = map(percentage, 0, 100, 0, 255);
+    analogWrite(LED_PWM_PIN, pwmValue);
+    
+    controlRelays(percentage);
+    
+    printJsonMessage(percentage);
+    
+    Serial.print("ADC: ");
+    Serial.print(adcValue);
+    Serial.print(" -> Intensidad LED: ");
+    Serial.print(percentage);
+    Serial.print("% -> PWM: ");
+    Serial.println(pwmValue);
+    
+    delay(READ_DELAY_MS);
+}

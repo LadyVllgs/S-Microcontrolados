@@ -1,0 +1,63 @@
+//ENCENDER 3 LEDS SEGUN EL RANGO DE VALORES DE UN POTENCIOMETRO USANDO ESP-IDF FRAMEWORK
+//Integrantes:Leidy Villegas, Isai Romero, Freider Redondo, Daniel Caballero
+
+
+#include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "driver/gpio.h"
+#include "driver/adc.h"
+
+// se definen los LEDS
+#define LED1 GPIO_NUM_5
+#define LED2 GPIO_NUM_18
+#define LED3 GPIO_NUM_19
+// se define el poenciometro
+#define POT ADC1_CHANNEL_6
+
+// Función tipo "map" (regla de 3)
+int map_value(int x, int in_min, int in_max, int out_min, int out_max) {
+    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+void app_main(void)
+{
+    
+    gpio_reset_pin(LED1);
+    gpio_reset_pin(LED2);
+    gpio_reset_pin(LED3);
+    gpio_set_direction(LED1, GPIO_MODE_OUTPUT);
+    gpio_set_direction(LED2, GPIO_MODE_OUTPUT);
+    gpio_set_direction(LED3, GPIO_MODE_OUTPUT);
+
+   
+    adc1_config_width(ADC_WIDTH_BIT_12);
+    adc1_config_channel_atten(POT, ADC_ATTEN_DB_11);
+
+    while (1) {
+        int valor = adc1_get_raw(POT);  
+        int lectura = map_value(valor, 0, 4095, 0, 1023);
+
+        printf("ADC Lectura: %d -> Escalado: %d\n", valor, lectura);
+
+        // se apagan los LEDS
+        gpio_set_level(LED1, 0);
+        gpio_set_level(LED2, 0);
+        gpio_set_level(LED3, 0);
+
+        // Condiciones
+        if (lectura > 767) {
+            gpio_set_level(LED1, 1);
+            gpio_set_level(LED2, 1);
+            gpio_set_level(LED3, 1);
+        } else if (lectura >= 512) {
+            gpio_set_level(LED1, 1);
+            gpio_set_level(LED2, 1);
+        } else if (lectura >= 256) {
+            gpio_set_level(LED1, 1);
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
+

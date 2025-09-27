@@ -1,0 +1,45 @@
+//IMPRIMIR VALORES DE TEMPERATURA DE 0 A 100 USANDO ARDUINO FRAMEWORK
+//Integrantes:Leidy Villegas, Isai Romero, Freider Redondo, Daniel Caballero
+
+// Se definen los pines para el LED y el potenciometro
+#define LED 5        
+#define SENSOR 34    
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(LED, OUTPUT);
+}
+
+void loop() {
+  long suma = 0;
+
+  // Leer 50 veces el ADC
+  for (int i = 0; i < 50; i++) {
+    int valor = analogRead(SENSOR);
+    suma += valor;
+    delay(10); //delay
+  
+  }
+
+  // Promedio de ADC
+  int promedio = suma / 50;
+
+  // Conversión a temperatura (0–100 °C) se usa map
+  int temperatura = map(promedio, 0 , 4095.0, 0, 100);
+
+  // Imprimir por Serial
+  Serial.print("Lectura: ");
+  Serial.print(promedio);
+  Serial.print(" -> Temp: ");
+  Serial.print(temperatura);
+  Serial.println(" °C");
+
+  // Encender LED si Temperatura > 50 °C
+  if (temperatura > 50.0) {
+    digitalWrite(LED, HIGH);
+  } else {
+    digitalWrite(LED, LOW);
+  }
+
+  delay(3000); // esperar 3 segundos antes de la siguiente medición
+}

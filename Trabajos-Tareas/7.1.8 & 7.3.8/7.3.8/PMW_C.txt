@@ -1,0 +1,194 @@
+//AJUSTAR LA INTENSIDAD DE UN LED POR MEDIO DE PWM Y ACTIVAR 4 MOTORES USANDO FRAMEWORK ESP-IDF
+//INTEGRANTES: Leidy Villegas, Isai Romero, Freider Redondo, Daniel Caballero
+#include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "driver/adc.h"
+#include "driver/ledc.h"
+#include "driver/gpio.h"
+#include "esp_log.h"
+
+// Configuración de pines
+#define POTENTIOMETER_ADC_CHANNEL ADC1_CHANNEL_6  // GPIO34
+#define LED_PWM_PIN               GPIO_NUM_2      // GPIO2 para PWM
+#define RELAY1_PIN                GPIO_NUM_4      // GPIO4 para Relay 1
+#define RELAY2_PIN                GPIO_NUM_5      // GPIO5 para Relay 2
+#define RELAY3_PIN                GPIO_NUM_18     // GPIO18 para Relay 3
+#define RELAY4_PIN                GPIO_NUM_19     // GPIO19 para Relay 4
+
+
+#define LEDC_TIMER              LEDC_TIMER_0
+#define LEDC_MODE               LEDC_HIGH_SPEED_MODE
+#define LEDC_CHANNEL            LEDC_CHANNEL_0
+#define LEDC_DUTY_RES           LEDC_TIMER_10_BIT  
+#define LEDC_FREQUENCY          5000               
+
+#define READ_DELAY_MS           1000              
+#define ADC_MAX_VALUE           4095              
+
+
+#define RELAY_ACTIVE_HIGH       1 
+
+static const char *TAG = "RELAY_CONTROL";
+
+void adc_init_config() {
+    adc1_config_width(ADC_WIDTH_BIT_12);
+    adc1_config_channel_atten(POTENTIOMETER_ADC_CHANNEL, ADC_ATTEN_DB_11);
+}
+
+void pwm_init_config() {
+    ledc_timer_config_t ledc_timer = {
+        .speed_mode = LEDC_MODE,
+        .duty_resolution = LEDC_DUTY_RES,
+        .timer_num = LEDC_TIMER,
+        .freq_hz = LEDC_FREQUENCY,
+        .clk_cfg = LEDC_AUTO_CLK
+    };
+    ledc_timer_config(&ledc_timer);
+
+    ledc_channel_config_t ledc_channel = {
+        .gpio_num = LED_PWM_PIN,
+        .speed_mode = LEDC_MODE,
+        .channel = LEDC_CHANNEL,
+        .intr_type = LEDC_INTR_DISABLE,
+        .timer_sel = LEDC_TIMER,
+        .duty = 0,
+        .hpoint = 0
+    };
+    ledc_channel_config(&ledc_channel);
+}
+
+void relays_init_config() {
+    gpio_config_t io_conf;
+    io_conf.pin_bit_mask = (1ULL << RELAY1_PIN) | (1ULL << RELAY2_PIN) | 
+                          (1ULL << RELAY3_PIN) | (1ULL << RELAY4_PIN);
+    io_conf.mode = GPIO_MODE_OUTPUT;
+    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    gpio_config(&io_conf);
+  
+    if (RELAY_ACTIVE_HIGH) {
+        gpio_set_level(RELAY1_PIN, 0);
+        gpio_set_level(RELAY2_PIN, 0);
+        gpio_set_level(RELAY3_PIN, 0);
+        gpio_set_level(RELAY4_PIN, 0);
+    } else {
+        gpio_set_level(RELAY1_PIN, 1);
+        gpio_set_level(RELAY2_PIN, 1);
+        gpio_set_level(RELAY3_PIN, 1);
+        gpio_set_level(RELAY4_PIN, 1);
+    }
+}
+
+
+void control_relays(int percentage) {
+    int relay1, relay2, relay3, relay4;
+    
+
+    if (percentage > 0 && percentage <= 25) {
+        relay1 = 1; relay2 = 0; relay3 = 0; relay4 = 0;
+    }
+    else if (percentage > 25 && percentage <= 50) {
+        relay1 = 1; relay2 = 1; relay3 = 0; relay4 = 0;
+    }
+    else if (percentage > 50 && percentage <= 75) {
+        relay1 = 1; relay2 = 1; relay3 = 1; relay4 = 0;
+    }
+    else if (percentage > 75 && percentage <= 100) {
+        relay1 = 1; relay2 = 1; relay3 = 1; relay4 = 1;
+    }
+    else {
+        relay1 = 0; relay2 = 0; relay3 = 0; relay4 = 0;
+    }
+    
+    if (RELAY_ACTIVE_HIGH) {
+        gpio_set_level(RELAY1_PIN, relay1);
+        gpio_set_level(RELAY2_PIN, relay2);
+        gpio_set_level(RELAY3_PIN, relay3);
+        gpio_set_level(RELAY4_PIN, relay4);
+    } else {
+        gpio_set_level(RELAY1_PIN, !relay1);
+        gpio_set_level(RELAY2_PIN, !relay2);
+        gpio_set_level(RELAY3_PIN, !relay3);
+        gpio_set_level(RELAY4_PIN, !relay4);
+    }
+}
+
+void print_json_message(int percentage) {
+    int relay1, relay2, relay3, relay4;
+    
+    if (percentage > 0 && percentage <= 25) {
+        relay1 = 1; relay2 = 0; relay3 = 0; relay4 = 0;
+    }
+    else if (percentage > 25 && percentage <= 50) {
+        relay1 = 1; relay2 = 1; relay3 = 0; relay4 = 0;
+    }
+    else if (percentage > 50 && percentage <= 75) {
+        relay1 = 1; relay2 = 1; relay3 = 1; relay4 = 0;
+    }
+    else if (percentage > 75 && percentage <= 100) {
+        relay1 = 1; relay2 = 1; relay3 = 1; relay4 = 1;
+    }
+    else {
+        relay1 = 0; relay2 = 0; relay3 = 0; relay4 = 0;
+    }
+    
+    printf("{\"valor\": %d, \"relay1\": %d, \"relay2\": %d, \"relay3\": %d, \"relay4\": %d}\n",
+           percentage, relay1, relay2, relay3, relay4);
+}
+
+void relay_control_task(void *pvParameter) {
+    while (1) {
+        int adc_value = adc1_get_raw(POTENTIOMETER_ADC_CHANNEL);
+        
+        int percentage = (adc_value * 100) / ADC_MAX_VALUE;
+        
+        if (percentage < 0) percentage = 0;
+        if (percentage > 100) percentage = 100;
+        
+        uint32_t duty = (percentage * 1023) / 100;
+        
+        ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, duty);
+        ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
+        
+        control_relays(percentage);
+        
+        print_json_message(percentage);
+        
+        ESP_LOGI(TAG, "ADC: %d, Porcentaje: %d%%, Duty: %lu", 
+                adc_value, percentage, duty);
+        
+        vTaskDelay(pdMS_TO_TICKS(READ_DELAY_MS));
+    }
+}
+
+void app_main() {
+    adc_init_config();
+    pwm_init_config();
+    relays_init_config();
+    
+    esp_log_level_set(TAG, ESP_LOG_INFO);
+    
+    ESP_LOGI(TAG, "=== SISTEMA DE CONTROL CON RELAYS ===");
+    ESP_LOGI(TAG, "Potenciómetro → LED PWM + Control de 4 Relays");
+    ESP_LOGI(TAG, "GPIO34: Potenciómetro (ADC)");
+    ESP_LOGI(TAG, "GPIO2:  LED PWM");
+    ESP_LOGI(TAG, "GPIO4:  Relay 1");
+    ESP_LOGI(TAG, "GPIO5:  Relay 2");
+    ESP_LOGI(TAG, "GPIO18: Relay 3");
+    ESP_LOGI(TAG, "GPIO19: Relay 4");
+    ESP_LOGI(TAG, "Rangos de activación:");
+    ESP_LOGI(TAG, "0-25%%:   Relay 1 ON");
+    ESP_LOGI(TAG, "25-50%%:  Relays 1-2 ON");
+    ESP_LOGI(TAG, "50-75%%:  Relays 1-3 ON");
+    ESP_LOGI(TAG, "75-100%%: Todos los relays ON");
+    ESP_LOGI(TAG, "Relay type: %s", RELAY_ACTIVE_HIGH ? "Active-HIGH" : "Active-LOW");
+    ESP_LOGI(TAG, "=====================================");
+
+    xTaskCreate(relay_control_task, "relay_control_task", 4096, NULL, 5, NULL);
+    
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(10000)); 
+    }
+}
